@@ -1,0 +1,40 @@
+# Compiled object files
+*.o
+*.obj
+
+# Executables
+*.exe
+*.out
+a.out
+main
+
+# Debug files
+*.dSYM/
+*.pdb
+
+# IDE files
+.vscode/
+.vs/
+*.vcxproj.user
+*.sln.docstates
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Build directories
+build/
+debug/
+release/
+
+# OS specific
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*~
