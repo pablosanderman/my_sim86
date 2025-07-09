@@ -1,28 +1,32 @@
 #include "sim86.h"
+#include "trace.h"
 #include <stdio.h>
+#include <string.h>
 
-int main()
+#include "trace.c"
+
+int main(int argc, char **argv)
 {
+    if (argc > 1 && strcmp(argv[1], "-t") == 0)
+    {
+        trace_enable(1);
+    }
+
+    char FileName[] = "listing_0037_single_register_mov";
     u32 Result = 0;
-    FILE *File = fopen("listing_0037_single_register_mov", "rb");
+
+    char buffer[1024];
+
+    FILE *File = fopen(FileName, "rb");
     if (File)
     {
-        char buffer[1024];
         Result = fread(buffer, 1, 1024, File);
-        printf("Read %u bytes\n", Result);
-
-        for (u32 i = 0; i < Result; i++)
-        {
-            printf("%02x", (unsigned char)buffer[i]);
-        }
-        printf("\n");
-
         fclose(File);
-        return 0;
     }
     else
     {
-        printf("Failed to open file\n");
-        return 1;
+        fprintf(stderr, "ERROR: Unable to open %s.\n", FileName);
     }
+
+    return 0;
 }
