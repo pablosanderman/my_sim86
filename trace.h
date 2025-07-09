@@ -1,2 +1,2 @@
-void trace_enable(int enable);
-void trace(const char *message);
+void TraceEnabled(int enable);
+void Trace(const char *format, ...);
