@@ -41,11 +41,16 @@ Sometimes you need to look up based on multiple criteria. Think about:
 
 ### Exercise 3 Hints (The Challenge!)
 - **Multi-dimensional Problem**: You need to look up by opcode AND operand types
+- **Example queries**: 
+  - `find_instruction(0x89, OPERAND_REG, OPERAND_REG)` → MOV reg, reg
+  - `find_instruction(0x89, OPERAND_REG, OPERAND_MEM)` → MOV reg, mem
+  - `find_instruction(0xB8, OPERAND_REG, OPERAND_IMM)` → MOV reg, imm
 - **Approach Ideas**:
   1. **Nested Tables**: Array of arrays
   2. **Flattened Index**: Calculate single index from multiple dimensions
   3. **Multiple Tables**: Separate table for each aspect
   4. **Composite Keys**: Combine criteria into single lookup value
+  5. **Linear Search**: Array of structs with all three fields
 
 ## Real-World Connection: sim86
 
