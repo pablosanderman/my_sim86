@@ -4,7 +4,7 @@ This repository contains my homework for the [Performance-Aware Programming cour
 
 ## Goals
 
-- **Learn C/C++**  
+- **Learn C/C++ and Performance-Aware Programming**  
   I aim to use the summer of 2025 to improve my C/C++ skills and complete this course.
 
 - **Timeframe**  
