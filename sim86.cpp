@@ -137,8 +137,9 @@ int main(int ArgCount, char **Args)
     }
 
     // Load bytes from file
-    char FileName[] = "listing_0037_single_register_mov";
+    // char FileName[] = "listing_0037_single_register_mov";
     // char FileName[] = "listing_0038_many_register_mov";
+    char FileName[] = "listing_0039_more_movs";
     u8 Bytes[1024];
     u32 BytesCount = LoadBytesFromFile(FileName, Bytes);
     Trace("BytesCount: %d\n", BytesCount);
