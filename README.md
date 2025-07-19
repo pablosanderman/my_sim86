@@ -2,8 +2,6 @@
 
 This repository contains my homework for the [Performance-Aware Programming course by Casey Muratori](https://www.computerenhance.com/p/table-of-contents).
 
----
-
 ## Goals
 
 - **Learn C/C++**  
@@ -16,7 +14,3 @@ This repository contains my homework for the [Performance-Aware Programming cour
   - **Daily Commitment:** 4 hours per day  
   - **Total Duration:** 6 weeks × 7 days = 42 days  
   - **Total Hours:** 4 hours/day × 42 days = **168 hours**
-
----
-
-I will try to finish the course within these 168 hours.
