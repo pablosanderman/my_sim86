@@ -14,3 +14,7 @@ This repository contains my homework for the [Performance-Aware Programming cour
   - **Daily Commitment:** 4 hours per day  
   - **Total Duration:** 6 weeks × 7 days = 42 days  
   - **Total Hours:** 4 hours/day × 42 days = **168 hours**
+
+### Reference
+
+Here is the [GitHub](https://github.com/cmuratori/computer_enhance) repository for Casey Muratori's solutions and related materials for the Computer Enhance course.
