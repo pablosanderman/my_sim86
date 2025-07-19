@@ -3,103 +3,168 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "trace.c"
+#include "instruction_table.h"
 
-// Lookup tables for instruction decoding
-const char *OpCodeTable[] = {
-    "add",  "add",  "add",  "add",  "add",  "add",  "push", "pop", "or",
-    "or",   "or",   "or",   "or",   "or",   "push", "???",  "adc", "adc",
-    "adc",  "adc",  "adc",  "adc",  "push", "pop",  "sbb",  "sbb", "sbb",
-    "sbb",  "sbb",  "sbb",  "push", "pop",  "and",  "and",  "mov", "and",
-    "and",  "and",  "???",  "daa",  "sub",  "sub",  "sub",  "sub", "sub",
-    "sub",  "???",  "das",  "xor",  "xor",  "xor",  "xor",  "xor", "xor",
-    "???",  "aaa",  "cmp",  "cmp",  "cmp",  "cmp",  "cmp",  "cmp", "???",
-    "aas",  "inc",  "inc",  "inc",  "inc",  "inc",  "inc",  "inc", "inc",
-    "dec",  "dec",  "dec",  "dec",  "dec",  "dec",  "dec",  "dec", "push",
-    "push", "push", "push", "push", "push", "push", "push", "pop", "pop",
-    "pop",  "pop",  "pop",  "pop",  "pop",  "pop",  "???",  "???", "???",
-    "???",  "???",  "???",  "???",  "???",  "???",  "???",  "???", "???",
-    "???",  "???",  "???",  "???",  "???",  "???",  "???",  "???", "???",
-    "???",  "???",  "???",  "???",  "???",  "???",  "???",  "???", "???",
-    "???",  "???",  "???",  "???",  "???",  "???",  "???",  "???", "???",
-    "???",  "???",  "???",  "???",  "???",  "???",  "???",  "???", "???",
-    "mov",  "mov",  "mov",  "mov",  "mov",  "mov",  "mov",  "mov"};
+#include "trace.cpp"
 
-// Register names for W=0 (8-bit registers)
-const char *Reg8Table[] = {"al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"};
+// Binary format: printf("byte: " BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(byte));
+#define BYTE_TO_BINARY_PATTERN "%d%d%d%d%d%d%d%d\n"
+#define BYTE_TO_BINARY(byte)                                                   \
+    ((byte) & 0x80 ? 1 : 0), ((byte) & 0x40 ? 1 : 0), ((byte) & 0x20 ? 1 : 0), \
+        ((byte) & 0x10 ? 1 : 0), ((byte) & 0x08 ? 1 : 0),                      \
+        ((byte) & 0x04 ? 1 : 0), ((byte) & 0x02 ? 1 : 0),                      \
+        ((byte) & 0x01 ? 1 : 0),
 
-// Register names for W=1 (16-bit registers)
-const char *Reg16Table[] = {"ax", "cx", "dx", "bx", "sp", "bp", "si", "di"};
+const char *RegisterTable[]{
+    "al", "cl", "dl", "bl", "ah", "ch", "dh", "bh",
+    "ax", "cx", "dx", "bx", "sp", "bp", "si", "di",
+};
 
-int main(int argc, char **argv)
+u32 LoadBytesFromFile(char *FileName, u8 Bytes[])
 {
-    if (argc > 1 && strcmp(argv[1], "-t") == 0)
-    {
-        TraceEnabled(1);
-    }
-
-    char FileName[] = "listing_0037_single_register_mov";
-    u32 BytesRead = 0;
-
-    u8 Buffer[1024];
+    u32 BytesCount = 0;
 
     FILE *File = fopen(FileName, "rb");
     if (File)
     {
-        BytesRead = fread(Buffer, 1, 1024, File);
+        BytesCount = fread(Bytes, 1, 1024, File);
         fclose(File);
     }
     else
     {
         fprintf(stderr, "ERROR: Unable to open %s.\n", FileName);
     }
+    return BytesCount;
+}
 
-    Trace("BytesRead: %d\n", BytesRead);
-    u8 OpCode = 0;
-    u8 D = 0;
-    u8 W = 0;
-    u8 Mod = 0;
-    u8 Reg = 0;
-    u8 Rm = 0;
-    for (u32 i = 0; i < BytesRead; i++)
+bool TryDecode(instruction_encoding Pattern, u8 *Bytes, u8 *At)
+{
+    u8 BitsCount = 0;
+
+    const char *Opcode;
+    bool d;
+    bool w;
+    u8 mod;
+    u8 reg;
+    u8 rm;
+
+    u8 BitsIndex = 0;
+
+    for (u8 PatternBitsIndex = 0; PatternBitsIndex < 6; PatternBitsIndex++)
     {
-        Trace("%02X ", Buffer[i]);
+        instruction_bits Bits = Pattern.Bits[PatternBitsIndex];
+        instruction_bits_usage Usage = Bits.Usage;
 
-        u8 byte = Buffer[i];
-        if (i == 0)
+        // Opcode
+        if (PatternBitsIndex == 0 && Usage == Bits_Literal)
         {
-            OpCode = byte >> 2;
-            D = (byte >> 1) & 0x1; // Extract D bit properly
-            W = byte & 0x1;
-            Trace("OpCode: %d, D: %d, W: %d\n", OpCode, D, W);
-        }
-        else if (i == 1)
-        {
-            Mod = byte >> 6;
-            Reg = (byte >> 3) & 0x7;
-            Rm = byte & 0x7;
-            Trace("Mod: %d, Reg: %d, Rm: %d\n", Mod, Reg, Rm);
-
-            // Decode the instruction
-            if (OpCode < sizeof(OpCodeTable) / sizeof(OpCodeTable[0]))
+            u8 Byte = Bytes[*At];
+            u8 OpcodeMasked = Byte >> (8 - Bits.Count);
+            if (OpcodeMasked == Bits.Value)
             {
-                const char *mnemonic = OpCodeTable[OpCode];
-                const char *regName = W ? Reg16Table[Reg] : Reg8Table[Reg];
-                const char *rmName = W ? Reg16Table[Rm] : Reg8Table[Rm];
+                Opcode = OpcodeTable[Pattern.Opcode];
+                BitsIndex += Bits.Count;
+            }
+            else
+            {
+                return false;
+            }
+        }
 
-                // For MOV instruction, determine source and destination based
-                // on D bit
-                if (D == 1)
-                {
-                    printf("%s %s, %s\n", mnemonic, regName, rmName);
-                }
-                else
-                {
-                    printf("%s %s, %s\n", mnemonic, rmName, regName);
-                }
+        if (Usage == Bits_D)
+        {
+            u8 Byte = Bytes[*At];
+            u8 BitPosition = 8 - BitsIndex - Bits.Count;
+            d = (Byte >> BitPosition) & ((1 << Bits.Count) - 1);
+            BitsIndex += Bits.Count;
+        }
+
+        if (Usage == Bits_W)
+        {
+            u8 Byte = Bytes[*At];
+            u8 BitPosition = 8 - BitsIndex - Bits.Count;
+            w = (Byte >> BitPosition) & ((1 << Bits.Count) - 1);
+            BitsIndex += Bits.Count;
+        }
+
+        if (Usage == Bits_MOD)
+        {
+            u8 Byte = Bytes[*At];
+            u8 BitPosition = 8 - BitsIndex - Bits.Count;
+            mod = (Byte >> BitPosition) & ((1 << Bits.Count) - 1);
+            BitsIndex += Bits.Count;
+        }
+
+        if (Usage == Bits_REG)
+        {
+            u8 Byte = Bytes[*At];
+            u8 BitPosition = 8 - BitsIndex - Bits.Count;
+            reg = (Byte >> BitPosition) & ((1 << Bits.Count) - 1);
+            BitsIndex += Bits.Count;
+        }
+
+        if (Usage == Bits_RM)
+        {
+            u8 Byte = Bytes[*At];
+            u8 BitPosition = 8 - BitsIndex - Bits.Count;
+            rm = (Byte >> BitPosition) & ((1 << Bits.Count) - 1);
+            BitsIndex += Bits.Count;
+        }
+
+        if (BitsIndex == 8)
+        {
+            *At += 1;
+            BitsIndex = 0;
+        }
+
+        BitsCount += Bits.Count;
+    }
+    u8 REGIndex = w == 1 ? reg + 8 : reg;
+    u8 RMIndex = w == 1 ? rm + 8 : rm;
+    const char *regs = RegisterTable[REGIndex];
+    const char *rms = RegisterTable[RMIndex];
+    printf("%s %s, %s\n", Opcode, rms, regs);
+    Trace("%s %d %d %x %x %x", Opcode, d, w, mod, reg, rm);
+    return false;
+}
+
+int main(int ArgCount, char **Args)
+{
+    // Enable debug tracing
+    if (ArgCount > 1 && strcmp(Args[1], "-t") == 0)
+    {
+        TraceEnabled(1);
+    }
+
+    // Load bytes from file
+    char FileName[] = "listing_0037_single_register_mov";
+    // char FileName[] = "listing_0038_many_register_mov";
+    u8 Bytes[1024];
+    u32 BytesCount = LoadBytesFromFile(FileName, Bytes);
+    Trace("BytesCount: %d\n", BytesCount);
+
+    // Loop over each instruction pattern and pattern match the bytes
+
+    u8 At = 0;
+    while (At < BytesCount)
+    {
+        for (u8 PatternIndex = 0; PatternIndex < 1; PatternIndex++)
+        {
+            instruction_encoding Pattern = InstructionTable[PatternIndex];
+
+            if (TryDecode(Pattern, Bytes, &At))
+            {
+                printf("x\n");
             }
         }
     }
+    // for (u32 i = 0; i < BytesCount; i += 2)
+    // {
+    //     u8 byte1 = Bytes[i];
+    //     u8 byte2 = Bytes[i + 1];
+    //     printf("byte: " BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(byte1));
+    //     printf("byte: " BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(byte1));
+    // }
 
     Trace("\n");
 
