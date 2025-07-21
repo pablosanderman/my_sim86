@@ -9,6 +9,9 @@
 #define REG {Bits_REG, 3}
 #define RM {Bits_RM, 3}
 
+#define DATA {Bits_DATA, 8}
+#define DATA_IF_W {Bits_DATA_IF_W, 8}
+
 enum instruction_opcode : u8
 {
     Op_mov,
@@ -24,6 +27,10 @@ enum instruction_bits_usage : u8
     Bits_MOD,
     Bits_REG,
     Bits_RM,
+    Bits_DATA,
+    Bits_DATA_IF_W,
+
+    Bits_Count
 };
 
 struct instruction_bits

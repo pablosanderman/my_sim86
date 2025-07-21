@@ -39,18 +39,14 @@ u32 LoadBytesFromFile(char *FileName, u8 Bytes[])
 
 bool TryDecode(instruction_encoding Pattern, u8 *Bytes, u8 *At)
 {
-    u8 BitsCount = 0;
 
-    const char *Opcode;
-    bool d;
-    bool w;
-    u8 mod;
-    u8 reg;
-    u8 rm;
+    const char *Opcode = 0;
+    bool Has[Bits_Count] = {};
+    u32 Value[Bits_Count] = {};
 
     u8 BitsIndex = 0;
 
-    for (u8 PatternBitsIndex = 0; PatternBitsIndex < 6; PatternBitsIndex++)
+    for (u8 PatternBitsIndex = 0; PatternBitsIndex < 16; PatternBitsIndex++)
     {
         instruction_bits Bits = Pattern.Bits[PatternBitsIndex];
         instruction_bits_usage Usage = Bits.Usage;
@@ -64,6 +60,7 @@ bool TryDecode(instruction_encoding Pattern, u8 *Bytes, u8 *At)
             {
                 Opcode = OpcodeTable[Pattern.Opcode];
                 BitsIndex += Bits.Count;
+                continue;
             }
             else
             {
@@ -71,60 +68,41 @@ bool TryDecode(instruction_encoding Pattern, u8 *Bytes, u8 *At)
             }
         }
 
-        if (Usage == Bits_D)
-        {
-            u8 Byte = Bytes[*At];
-            u8 BitPosition = 8 - BitsIndex - Bits.Count;
-            d = (Byte >> BitPosition) & ((1 << Bits.Count) - 1);
-            BitsIndex += Bits.Count;
-        }
-
-        if (Usage == Bits_W)
-        {
-            u8 Byte = Bytes[*At];
-            u8 BitPosition = 8 - BitsIndex - Bits.Count;
-            w = (Byte >> BitPosition) & ((1 << Bits.Count) - 1);
-            BitsIndex += Bits.Count;
-        }
-
-        if (Usage == Bits_MOD)
-        {
-            u8 Byte = Bytes[*At];
-            u8 BitPosition = 8 - BitsIndex - Bits.Count;
-            mod = (Byte >> BitPosition) & ((1 << Bits.Count) - 1);
-            BitsIndex += Bits.Count;
-        }
-
-        if (Usage == Bits_REG)
-        {
-            u8 Byte = Bytes[*At];
-            u8 BitPosition = 8 - BitsIndex - Bits.Count;
-            reg = (Byte >> BitPosition) & ((1 << Bits.Count) - 1);
-            BitsIndex += Bits.Count;
-        }
-
-        if (Usage == Bits_RM)
-        {
-            u8 Byte = Bytes[*At];
-            u8 BitPosition = 8 - BitsIndex - Bits.Count;
-            rm = (Byte >> BitPosition) & ((1 << Bits.Count) - 1);
-            BitsIndex += Bits.Count;
-        }
+        Has[Usage] = true;
+        u8 Byte = Bytes[*At];
+        u8 BitPosition = 8 - BitsIndex - Bits.Count;
+        Value[Usage] = (Byte >> BitPosition) & ((1 << Bits.Count) - 1);
+        BitsIndex += Bits.Count;
 
         if (BitsIndex == 8)
         {
             *At += 1;
             BitsIndex = 0;
         }
-
-        BitsCount += Bits.Count;
     }
-    u8 REGIndex = w == 1 ? reg + 8 : reg;
-    u8 RMIndex = w == 1 ? rm + 8 : rm;
-    const char *regs = RegisterTable[REGIndex];
-    const char *rms = RegisterTable[RMIndex];
-    printf("%s %s, %s\n", Opcode, rms, regs);
-    Trace("%s %d %d %x %x %x", Opcode, d, w, mod, reg, rm);
+    if (Has[Bits_D] && Has[Bits_RM])
+    {
+        u8 REGIndex =
+            Value[Bits_W] == 1 ? Value[Bits_REG] + 8 : Value[Bits_REG];
+        u8 RMIndex = Value[Bits_W] == 1 ? Value[Bits_RM] + 8 : Value[Bits_RM];
+        const char *regs = RegisterTable[REGIndex];
+        const char *rms = RegisterTable[RMIndex];
+        printf("%s %s, %s\n", Opcode, rms, regs);
+        // Trace("%s %d %d %x %x %x\n", Opcode, d, w, mod, reg, Value[Bits_RM]);
+    }
+    else
+    {
+        u8 REGIndex =
+            Value[Bits_W] == 1 ? Value[Bits_REG] + 8 : Value[Bits_REG];
+        const char *regs = RegisterTable[REGIndex];
+        if (Value[Bits_W])
+        {
+            u16 bigdata = Value[Bits_DATA] | (Value[Bits_DATA_IF_W] << 8);
+            printf("%s %s, %d\n", Opcode, regs, bigdata);
+        }
+        printf("%s %s, %d\n", Opcode, regs, Value[Bits_DATA]);
+    }
+
     return false;
 }
 
@@ -149,7 +127,7 @@ int main(int ArgCount, char **Args)
     u8 At = 0;
     while (At < BytesCount)
     {
-        for (u8 PatternIndex = 0; PatternIndex < 1; PatternIndex++)
+        for (u8 PatternIndex = 0; PatternIndex < 3; PatternIndex++)
         {
             instruction_encoding Pattern = InstructionTable[PatternIndex];
 
@@ -159,13 +137,6 @@ int main(int ArgCount, char **Args)
             }
         }
     }
-    // for (u32 i = 0; i < BytesCount; i += 2)
-    // {
-    //     u8 byte1 = Bytes[i];
-    //     u8 byte2 = Bytes[i + 1];
-    //     printf("byte: " BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(byte1));
-    //     printf("byte: " BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(byte1));
-    // }
 
     Trace("\n");
 
