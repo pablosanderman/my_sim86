@@ -8,5 +8,6 @@ instruction_encoding InstructionTable[] = {
 };
 
 const char *OpcodeTable[] = {
+    "none",
     "mov",
 };

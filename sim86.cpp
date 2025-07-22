@@ -1,5 +1,6 @@
 #include "sim86.h"
 #include "trace.h"
+#include <cstdio>
 #include <stdio.h>
 #include <string.h>
 
@@ -37,12 +38,14 @@ u32 LoadBytesFromFile(char *FileName, u8 Bytes[])
     return BytesCount;
 }
 
-bool TryDecode(instruction_encoding Pattern, u8 *Bytes, u8 *At)
+instruction TryDecode(instruction_encoding Pattern, u8 *Bytes, u8 *At)
 {
-
+    instruction Inst = {};
+    bool Valid = false;
     const char *Opcode = 0;
     bool Has[Bits_Count] = {};
     u32 Value[Bits_Count] = {};
+    static char DataBuffer[32]; // Buffer for number-to-string conversion
 
     u8 BitsIndex = 0;
 
@@ -64,7 +67,7 @@ bool TryDecode(instruction_encoding Pattern, u8 *Bytes, u8 *At)
             }
             else
             {
-                return false;
+                break;
             }
         }
 
@@ -80,30 +83,34 @@ bool TryDecode(instruction_encoding Pattern, u8 *Bytes, u8 *At)
             BitsIndex = 0;
         }
     }
-    if (Has[Bits_D] && Has[Bits_RM])
+    if (Valid)
     {
-        u8 REGIndex =
-            Value[Bits_W] == 1 ? Value[Bits_REG] + 8 : Value[Bits_REG];
-        u8 RMIndex = Value[Bits_W] == 1 ? Value[Bits_RM] + 8 : Value[Bits_RM];
-        const char *regs = RegisterTable[REGIndex];
-        const char *rms = RegisterTable[RMIndex];
-        printf("%s %s, %s\n", Opcode, rms, regs);
-        // Trace("%s %d %d %x %x %x\n", Opcode, d, w, mod, reg, Value[Bits_RM]);
-    }
-    else
-    {
-        u8 REGIndex =
-            Value[Bits_W] == 1 ? Value[Bits_REG] + 8 : Value[Bits_REG];
-        const char *regs = RegisterTable[REGIndex];
-        if (Value[Bits_W])
+        if (Has[Bits_D] && Has[Bits_RM])
         {
-            u16 bigdata = Value[Bits_DATA] | (Value[Bits_DATA_IF_W] << 8);
-            printf("%s %s, %d\n", Opcode, regs, bigdata);
+            u8 REGIndex =
+                Value[Bits_W] == 1 ? Value[Bits_REG] + 8 : Value[Bits_REG];
+            u8 RMIndex =
+                Value[Bits_W] == 1 ? Value[Bits_RM] + 8 : Value[Bits_RM];
+            const char *regs = RegisterTable[REGIndex];
+            const char *rms = RegisterTable[RMIndex];
+            Inst = {Opcode, rms, regs};
         }
-        printf("%s %s, %d\n", Opcode, regs, Value[Bits_DATA]);
+        else
+        {
+            u8 REGIndex =
+                Value[Bits_W] == 1 ? Value[Bits_REG] + 8 : Value[Bits_REG];
+            const char *regs = RegisterTable[REGIndex];
+            if (Value[Bits_W])
+            {
+                u16 bigdata = Value[Bits_DATA] | (Value[Bits_DATA_IF_W] << 8);
+                printf("%s %s, %d\n", Opcode, regs, bigdata);
+            }
+            snprintf(DataBuffer, sizeof(DataBuffer), "%d", Value[Bits_DATA]);
+            Inst = {Opcode, regs, DataBuffer};
+        }
     }
 
-    return false;
+    return Inst;
 }
 
 int main(int ArgCount, char **Args)
@@ -131,10 +138,8 @@ int main(int ArgCount, char **Args)
         {
             instruction_encoding Pattern = InstructionTable[PatternIndex];
 
-            if (TryDecode(Pattern, Bytes, &At))
-            {
-                printf("x\n");
-            }
+            instruction Inst = TryDecode(Pattern, Bytes, &At);
+            printf("%s %s, %s", Inst.Mnemonic, Inst.Op1, Inst.Op2);
         }
     }
 

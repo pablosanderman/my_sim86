@@ -12,9 +12,11 @@
 #define DATA {Bits_DATA, 8}
 #define DATA_IF_W {Bits_DATA_IF_W, 8}
 
-enum instruction_opcode : u8
+enum operation_type : u8
 {
+    Op_none,
     Op_mov,
+    Op_count
 };
 
 extern const char *OpcodeTable[];
@@ -42,8 +44,15 @@ struct instruction_bits
 
 struct instruction_encoding
 {
-    instruction_opcode Opcode;
+    operation_type Opcode;
     instruction_bits Bits[16];
+};
+
+struct instruction
+{
+    const char *Mnemonic;
+    const char *Op1;
+    const char *Op2;
 };
 
 extern instruction_encoding InstructionTable[];
