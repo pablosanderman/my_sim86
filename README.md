@@ -8,7 +8,7 @@ This repository contains my homework for the [Performance-Aware Programming cour
   I aim to use the summer of 2025 to improve my C/C++ skills and complete this course.
 
 - **Timeframe**  
-  I have 6 weeks before starting my external minor.
+  I have 6 weeks before starting my external minor: [Systems Programming in C++](https://www.kiesopmaat.nl/modules/avans/ATD/141714/).
 
 - **Study Plan**  
   - **Daily Commitment:** 4 hours per day  
