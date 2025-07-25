@@ -15,14 +15,18 @@
 enum operation_type : u8
 {
     Op_none,
+
     Op_mov,
+
     Op_count
 };
 
 extern const char *OpcodeTable[];
 
-enum instruction_bits_usage : u8
+enum instruction_field_bits_usage : u8
 {
+    Bits_End,
+
     Bits_Literal,
     Bits_D,
     Bits_W,
@@ -31,13 +35,23 @@ enum instruction_bits_usage : u8
     Bits_RM,
     Bits_DATA,
     Bits_DATA_IF_W,
+    Bits_Disp,
 
     Bits_Count
 };
 
-struct instruction_bits
+enum instruction_type : u8
 {
-    instruction_bits_usage Usage;
+    Type_None,
+    Type_Immediate,
+    Type_Register,
+    Type_EAC,
+    Type_DirectAccess
+};
+
+struct instruction_field_bits
+{
+    instruction_field_bits_usage Usage;
     u8 Count;
     u8 Value;
 };
@@ -45,10 +59,16 @@ struct instruction_bits
 struct instruction_encoding
 {
     operation_type Opcode;
-    instruction_bits Bits[16];
+    instruction_field_bits FieldBits[16];
 };
 
-struct instruction
+struct instruction_extract
+{
+    bool Has[Bits_Count]; // Bool Array to keep track which fields have matched.
+    u32 Raw[Bits_Count];  // u32 Array to keep track of each field's raw data.
+};
+
+struct instruction_format
 {
     const char *Mnemonic;
     const char *Op1;
