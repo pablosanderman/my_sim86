@@ -93,8 +93,15 @@ instruction_extract MatchPattern(instruction_encoding Pattern, u8 *Bytes, u32 *A
         u8 CurrentByte = Bytes[*At];                      // The byte we are pattern matching
         u8 BitPosition = 8 - BitsIndex - FieldBits.Count; // The starting position of the field.
 
-        Extract.Has[FieldBits.Usage] = true;                                                        // Store the presence.
-        Extract.Raw[FieldBits.Usage] = (CurrentByte >> BitPosition) & ((1 << FieldBits.Count) - 1); // Store the data.
+        Extract.Has[FieldBits.Usage] = true; // Store the presence.
+        if (FieldBits.Value == 1)            // Very ugly, but in case its ImpD
+        {
+            Extract.Raw[FieldBits.Usage] = FieldBits.Value;
+        }
+        else
+        {
+            Extract.Raw[FieldBits.Usage] = (CurrentByte >> BitPosition) & ((1 << FieldBits.Count) - 1); // Store the data.
+        }
 
         if (FieldBits.Usage == Bits_Literal)
         {
@@ -149,7 +156,7 @@ const instruction_format InterpretExtract(instruction_extract Extract, operation
     // Opcode
     Format.Mnemonic = OpcodeTable[Opcode];
 
-    // Operands (handle direction flag for proper operand order)
+    // Operands
     const char *regOperand = nullptr;
     const char *rmOperand = nullptr;
 
@@ -179,6 +186,20 @@ const instruction_format InterpretExtract(instruction_extract Extract, operation
             rmOperand = BuildEffectiveAddress(mod, rm, displacement);
         }
     }
+    else // Immediate to register
+    {
+        static char immediateBuffer[32];
+        if (Extract.Raw[Bits_W] == true)
+        {
+            u16 Data = Extract.Raw[Bits_DATA] | (Extract.Raw[Bits_DATA_IF_W] << 8);
+            snprintf(immediateBuffer, sizeof(immediateBuffer), "%d", Data);
+        }
+        else
+        {
+            snprintf(immediateBuffer, sizeof(immediateBuffer), "%d", Extract.Raw[Bits_DATA]);
+        }
+        rmOperand = immediateBuffer;
+    }
 
     if (Extract.Has[Bits_D] && Extract.Raw[Bits_D] == 1)
     {
@@ -201,54 +222,6 @@ const instruction_format InterpretExtract(instruction_extract Extract, operation
 
     return Format;
 }
-
-// const instruction_format InterpretFields(instruction_extract Extract)
-// {
-//     bool Valid = false;
-//     const char *Opcode = 0;
-//     static char DataBuffer[32];
-
-//     // Opcode
-//     if (PatternBitsIndex == 0 && Usage == Bits_Literal)
-//     {
-//         u8 Byte = Bytes[*At];
-//         u8 OpcodeMasked = Byte >> (8 - Bits.Count);
-//         if (OpcodeMasked == Bits.Value)
-//         {
-//             Opcode = OpcodeTable[Pattern.Opcode];
-//             BitsIndex += Bits.Count;
-//             continue;
-//         }
-//         else
-//         {
-//             break;
-//         }
-//     }
-
-//     if (Valid)
-//     {
-//         if (Has[Bits_D] && Has[Bits_RM])
-//         {
-//             u8 REGIndex = Value[Bits_W] == 1 ? Value[Bits_REG] + 8 : Value[Bits_REG];
-//             u8 RMIndex = Value[Bits_W] == 1 ? Value[Bits_RM] + 8 : Value[Bits_RM];
-//             const char *regs = RegisterTable[REGIndex];
-//             const char *rms = RegisterTable[RMIndex];
-//             Inst = {Opcode, rms, regs};
-//         }
-//         else
-//         {
-//             u8 REGIndex = Value[Bits_W] == 1 ? Value[Bits_REG] + 8 : Value[Bits_REG];
-//             const char *regs = RegisterTable[REGIndex];
-//             if (Value[Bits_W])
-//             {
-//                 u16 bigdata = Value[Bits_DATA] | (Value[Bits_DATA_IF_W] << 8);
-//                 printf("%s %s, %d\n", Opcode, regs, bigdata);
-//             }
-//             snprintf(DataBuffer, sizeof(DataBuffer), "%d", Value[Bits_DATA]);
-//             Inst = {Opcode, regs, DataBuffer};
-//         }
-//     }
-// }
 
 int main(int ArgCount, char **Args)
 {

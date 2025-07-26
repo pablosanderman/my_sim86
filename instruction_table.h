@@ -12,6 +12,8 @@
 #define DATA {Bits_DATA, 8}
 #define DATA_IF_W {Bits_DATA_IF_W, 8}
 
+#define ImpD(Value) {Bits_D, 1, Value}
+
 enum operation_type : u8
 {
     Op_none,
