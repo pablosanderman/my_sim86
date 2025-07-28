@@ -1,11 +1,12 @@
 #include "sim86_shared.h"
+#include <cstring>
 #include <stdint.h>
 #include <stdio.h>
 
 // Keep the file loading function from your original code
-uint32_t LoadBytesFromFile(char *FileName, uint8_t Bytes[])
+u32 LoadBytesFromFile(char *FileName, u8 Bytes[])
 {
-    uint32_t BytesCount = 0;
+    u32 BytesCount = 0;
 
     FILE *File = fopen(FileName, "rb");
     if (File)
@@ -93,27 +94,92 @@ void PrintOperand(instruction_operand *Operand)
     }
 }
 
+void Execute8086Instruction(u32 *Array, instruction *Decoded)
+{
+    if (Decoded->Op == Op_mov)
+    {
+        u32 DestIndex = Decoded->Operands[0].Register.Index - 1;
+        u32 SourceValue;
+
+        if (Decoded->Operands[1].Type == Operand_Immediate)
+        {
+            SourceValue = Decoded->Operands[1].Immediate.Value;
+        }
+        else if (Decoded->Operands[1].Type == Operand_Register)
+        {
+            SourceValue = Array[Decoded->Operands[1].Register.Index - 1];
+        }
+
+        Array[DestIndex] = SourceValue;
+    }
+}
+const char *RegisterTable[] = {
+    "ax", "bx", "cx", "dx", "sp", "bp", "si", "di",
+};
+
+void PrintExecution(u32 *Array, instruction *Decoded)
+{
+    u32 RegisterIndex = Decoded->Operands[0].Register.Index - 1;
+    u32 OldValue = Array[RegisterIndex]; // Current value (before execution)
+    u32 NewValue;
+
+    if (Decoded->Operands[1].Type == Operand_Immediate)
+    {
+        NewValue = Decoded->Operands[1].Immediate.Value;
+    }
+    else if (Decoded->Operands[1].Type == Operand_Register)
+    {
+        NewValue = Array[Decoded->Operands[1].Register.Index - 1];
+    }
+
+    printf(" ; %s:0x%x->0x%x", RegisterTable[RegisterIndex], OldValue, NewValue);
+}
+
+void PrintFinalRegisters(u32 *Array)
+{
+    printf("\nFinal registers:\n");
+    for (int RegisterIndex = 0; RegisterIndex < 8; RegisterIndex++)
+    {
+        printf("      %s: 0x%04x (%d)\n", RegisterTable[RegisterIndex], Array[RegisterIndex], Array[RegisterIndex]);
+    }
+}
+
 int main(int ArgCount, char **Args)
 {
     // Load bytes from file
-    char FileName[] = "listing_0042_completionist_decode";
-    uint8_t Bytes[1024];
-    uint32_t BytesCount = LoadBytesFromFile(FileName, Bytes);
+    // char FileName[] = "listing_0043_immediate_movs";
+    char FileName[] = "listing_0044_register_movs";
+
+    u8 Bytes[1024];
+    u32 BytesCount = LoadBytesFromFile(FileName, Bytes);
 
     if (BytesCount == 0)
     {
         return 1;
     }
 
+    b32 Execute = false;
+
+    if (ArgCount == 2)
+    {
+        char *FileName = Args[1];
+
+        if (strcmp(FileName, "-exec") == 0)
+        {
+            Execute = true;
+        }
+    }
+
     printf("bits 16\n\n");
 
+    u32 Array[8] = {};
+
     // Decode instructions using shared library
-    uint32_t At = 0;
+    u32 At = 0;
     while (At < BytesCount)
     {
         instruction Decoded;
         Sim86_Decode8086Instruction(BytesCount - At, Bytes + At, &Decoded);
-
         if (Decoded.Op && Decoded.Size > 0)
         {
             // Print the instruction
@@ -131,6 +197,11 @@ int main(int ArgCount, char **Args)
                 }
             }
 
+            if (Execute)
+            {
+                PrintExecution(Array, &Decoded);         // Print BEFORE execution to capture old value
+                Execute8086Instruction(Array, &Decoded); // Then execute
+            }
             printf("\n");
             At += Decoded.Size;
         }
@@ -140,6 +211,7 @@ int main(int ArgCount, char **Args)
             break;
         }
     }
+    PrintFinalRegisters(Array);
 
     return 0;
 }
