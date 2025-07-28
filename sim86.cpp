@@ -1,7 +1,6 @@
 #include "sim86_shared.h"
 #include <stdint.h>
 #include <stdio.h>
-#include <string.h>
 
 // Keep the file loading function from your original code
 uint32_t LoadBytesFromFile(char *FileName, uint8_t Bytes[])
@@ -97,7 +96,7 @@ void PrintOperand(instruction_operand *Operand)
 int main(int ArgCount, char **Args)
 {
     // Load bytes from file
-    char FileName[] = "listing_0039_more_movs";
+    char FileName[] = "listing_0042_completionist_decode";
     uint8_t Bytes[1024];
     uint32_t BytesCount = LoadBytesFromFile(FileName, Bytes);
 
