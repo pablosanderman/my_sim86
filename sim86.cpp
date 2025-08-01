@@ -181,9 +181,7 @@ void Execute8086Instruction(u16 *Array, instruction *Decoded, processor_flags *f
         UpdateFlags(flags, result);
     }
 }
-const char *RegisterTable[] = {
-    "ax", "bx", "cx", "dx", "sp", "bp", "si", "di",
-};
+const char *RegisterTable[] = {"ax", "bx", "cx", "dx", "sp", "bp", "si", "di", "ip"};
 
 // Print flags
 void PrintFlags(processor_flags *oldFlags, processor_flags *newFlags)
@@ -209,10 +207,11 @@ void PrintFlags(processor_flags *oldFlags, processor_flags *newFlags)
         printf("Z");
 }
 
-void PrintExecution(u16 *Array, instruction *Decoded, u16 oldValue, processor_flags *oldFlags, processor_flags *newFlags)
+void PrintExecution(u16 *Array, instruction *Decoded, u16 oldValue, u16 oldIP, processor_flags *oldFlags, processor_flags *newFlags)
 {
     if (Decoded->Op == Op_cmp)
     {
+        printf(" ip:0x%x->0x%x", oldIP, Array[8]);
         PrintFlags(oldFlags, newFlags);
         return;
     }
@@ -220,7 +219,7 @@ void PrintExecution(u16 *Array, instruction *Decoded, u16 oldValue, processor_fl
     u16 RegisterIndex = Decoded->Operands[0].Register.Index - 1;
     u16 NewValue = Array[RegisterIndex]; // Value after execution
 
-    printf(" ; %s:0x%x->0x%x", RegisterTable[RegisterIndex], oldValue, NewValue);
+    printf(" ; %s:0x%x->0x%x ip:0x%x->0x%x", RegisterTable[RegisterIndex], oldValue, NewValue, oldIP, Array[8]);
 
     // Check if this operation affects flags and if flags changed
     if (Decoded->Op == Op_sub || Decoded->Op == Op_add)
@@ -243,10 +242,15 @@ void PrintFinalRegisters(u16 *Array, processor_flags *flags)
         }
     }
 
+    // Always print IP register
+    printf("      %s: 0x%04x (%d)\n", RegisterTable[8], Array[8], Array[8]);
+
     // Print flags if any are set
     if (flags->sign || flags->zero || flags->parity)
     {
         printf("   flags: ");
+        if (flags->sign)
+            printf("S");
         if (flags->parity)
             printf("P");
         if (flags->zero)
@@ -260,7 +264,9 @@ int main(int ArgCount, char **Args)
     // Load bytes from file
     // char FileName[] = "listing_0043_immediate_movs";
     // char FileName[] = "listing_0044_register_movs";
-    char FileName[] = "listing_0046_add_sub_cmp";
+    // char FileName[] = "listing_0046_add_sub_cmp";
+    // char FileName[] = "listing_0048_ip_register";
+    char FileName[] = "listing_0049_conditional_jumps";
 
     u8 Bytes[1024];
     u32 BytesCount = LoadBytesFromFile(FileName, Bytes);
@@ -284,7 +290,7 @@ int main(int ArgCount, char **Args)
 
     printf("bits 16\n\n");
 
-    u16 Array[8] = {};
+    u16 Array[9] = {};
     processor_flags flags = {};
 
     // Decode instructions using shared library
@@ -314,12 +320,14 @@ int main(int ArgCount, char **Args)
             {
                 processor_flags oldFlags = flags; // Save old flags
                 u16 oldValue = 0;
+                u16 oldIP = At; // Save the IP before execution
                 if (Decoded.Operands[0].Type == Operand_Register)
                 {
                     oldValue = Array[Decoded.Operands[0].Register.Index - 1];
                 }
-                Execute8086Instruction(Array, &Decoded, &flags);              // Execute and update flags
-                PrintExecution(Array, &Decoded, oldValue, &oldFlags, &flags); // Print with old and new values/flags
+                Array[8] = At + Decoded.Size;                                        // Update IP to point to next instruction
+                Execute8086Instruction(Array, &Decoded, &flags);                     // Execute and update flags
+                PrintExecution(Array, &Decoded, oldValue, oldIP, &oldFlags, &flags); // Print with old and new values/flags
             }
             printf("\n");
             At += Decoded.Size;
