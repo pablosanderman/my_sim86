@@ -124,11 +124,10 @@ void PrintOperand(instruction_operand *Operand)
 
 void Execute8086Instruction(u16 *Array, instruction *Decoded, processor_flags *flags)
 {
-    u16 DestIndex = Decoded->Operands[0].Register.Index - 1;
-    u16 SourceValue;
-
     if (Decoded->Op == Op_mov)
     {
+        u16 DestIndex = Decoded->Operands[0].Register.Index - 1;
+        u16 SourceValue;
         if (Decoded->Operands[1].Type == Operand_Immediate)
         {
             SourceValue = Decoded->Operands[1].Immediate.Value;
@@ -142,6 +141,8 @@ void Execute8086Instruction(u16 *Array, instruction *Decoded, processor_flags *f
     }
     else if (Decoded->Op == Op_sub)
     {
+        u16 DestIndex = Decoded->Operands[0].Register.Index - 1;
+        u16 SourceValue;
         if (Decoded->Operands[1].Type == Operand_Immediate)
         {
             SourceValue = Array[DestIndex] - Decoded->Operands[1].Immediate.Value;
@@ -155,6 +156,8 @@ void Execute8086Instruction(u16 *Array, instruction *Decoded, processor_flags *f
     }
     else if (Decoded->Op == Op_add)
     {
+        u16 DestIndex = Decoded->Operands[0].Register.Index - 1;
+        u16 SourceValue;
         if (Decoded->Operands[1].Type == Operand_Immediate)
         {
             SourceValue = Array[DestIndex] + Decoded->Operands[1].Immediate.Value;
@@ -168,6 +171,7 @@ void Execute8086Instruction(u16 *Array, instruction *Decoded, processor_flags *f
     }
     else if (Decoded->Op == Op_cmp)
     {
+        u16 DestIndex = Decoded->Operands[0].Register.Index - 1;
         u16 result;
         if (Decoded->Operands[1].Type == Operand_Immediate)
         {
@@ -179,6 +183,15 @@ void Execute8086Instruction(u16 *Array, instruction *Decoded, processor_flags *f
         }
         // cmp doesn't modify registers, only flags
         UpdateFlags(flags, result);
+    }
+    else if (Decoded->Op == Op_jne)
+    {
+        // Jump if not equal (zero flag is false) - same as jnz
+        if (!flags->zero)
+        {
+            // Relative jump - add the displacement to current IP
+            Array[8] = Array[8] + Decoded->Operands[0].Immediate.Value;
+        }
     }
 }
 const char *RegisterTable[] = {"ax", "bx", "cx", "dx", "sp", "bp", "si", "di", "ip"};
@@ -213,6 +226,12 @@ void PrintExecution(u16 *Array, instruction *Decoded, u16 oldValue, u16 oldIP, p
     {
         printf(" ip:0x%x->0x%x", oldIP, Array[8]);
         PrintFlags(oldFlags, newFlags);
+        return;
+    }
+
+    if (Decoded->Op == Op_jne)
+    {
+        printf(" ; ip:0x%x->0x%x", oldIP, Array[8]);
         return;
     }
 
@@ -325,12 +344,28 @@ int main(int ArgCount, char **Args)
                 {
                     oldValue = Array[Decoded.Operands[0].Register.Index - 1];
                 }
-                Array[8] = At + Decoded.Size;                                        // Update IP to point to next instruction
-                Execute8086Instruction(Array, &Decoded, &flags);                     // Execute and update flags
+                u16 expectedNextIP = At + Decoded.Size;
+                Array[8] = expectedNextIP;                                           // Update IP to point to next instruction
+                Execute8086Instruction(Array, &Decoded, &flags);                     // Execute and update flags (may modify IP for jumps)
                 PrintExecution(Array, &Decoded, oldValue, oldIP, &oldFlags, &flags); // Print with old and new values/flags
+
+                // Check if a jump occurred (IP was modified during execution)
+                if (Array[8] != expectedNextIP)
+                {
+                    // Jump occurred, set At to the new IP value
+                    At = Array[8];
+                }
+                else
+                {
+                    // No jump, advance normally
+                    At += Decoded.Size;
+                }
+            }
+            else
+            {
+                At += Decoded.Size;
             }
             printf("\n");
-            At += Decoded.Size;
         }
         else
         {
