@@ -3,6 +3,14 @@
 #include <stdint.h>
 #include <stdio.h>
 
+// Flags structure
+struct processor_flags
+{
+    bool zero;
+    bool sign;
+    bool parity;
+};
+
 // Keep the file loading function from your original code
 u32 LoadBytesFromFile(char *FileName, u8 Bytes[])
 {
@@ -19,6 +27,26 @@ u32 LoadBytesFromFile(char *FileName, u8 Bytes[])
         fprintf(stderr, "ERROR: Unable to open %s.\n", FileName);
     }
     return BytesCount;
+}
+
+// Helper function to calculate parity (even number of 1s = true)
+bool CalculateParity(u16 value)
+{
+    int count = 0;
+    for (int i = 0; i < 8; i++)
+    { // Only check low 8 bits for parity
+        if (value & (1 << i))
+            count++;
+    }
+    return (count % 2) == 0;
+}
+
+// Update flags based on result
+void UpdateFlags(processor_flags *flags, u16 result)
+{
+    flags->zero = (result == 0);
+    flags->sign = ((s16)result < 0);
+    flags->parity = CalculateParity(result);
 }
 
 // Helper function to print operand
@@ -94,7 +122,7 @@ void PrintOperand(instruction_operand *Operand)
     }
 }
 
-void Execute8086Instruction(u16 *Array, instruction *Decoded)
+void Execute8086Instruction(u16 *Array, instruction *Decoded, processor_flags *flags)
 {
     u16 DestIndex = Decoded->Operands[0].Register.Index - 1;
     u16 SourceValue;
@@ -110,8 +138,9 @@ void Execute8086Instruction(u16 *Array, instruction *Decoded)
             SourceValue = Array[Decoded->Operands[1].Register.Index - 1];
         }
         Array[DestIndex] = SourceValue;
+        // mov doesn't affect flags
     }
-    if (Decoded->Op == Op_sub)
+    else if (Decoded->Op == Op_sub)
     {
         if (Decoded->Operands[1].Type == Operand_Immediate)
         {
@@ -122,8 +151,9 @@ void Execute8086Instruction(u16 *Array, instruction *Decoded)
             SourceValue = Array[DestIndex] - Array[Decoded->Operands[1].Register.Index - 1];
         }
         Array[DestIndex] = SourceValue;
+        UpdateFlags(flags, SourceValue);
     }
-    if (Decoded->Op == Op_add)
+    else if (Decoded->Op == Op_add)
     {
         if (Decoded->Operands[1].Type == Operand_Immediate)
         {
@@ -134,70 +164,94 @@ void Execute8086Instruction(u16 *Array, instruction *Decoded)
             SourceValue = Array[DestIndex] + Array[Decoded->Operands[1].Register.Index - 1];
         }
         Array[DestIndex] = SourceValue;
+        UpdateFlags(flags, SourceValue);
     }
-    if (Decoded->Op == Op_cmp)
+    else if (Decoded->Op == Op_cmp)
     {
-        u32 Value = Array[Decoded->Operands[1].Register.Index - 1] - Array[DestIndex];
-        // i dont know how cmp works, does it store a flag? or -1, 0, 1? or subtrack?
+        u16 result;
+        if (Decoded->Operands[1].Type == Operand_Immediate)
+        {
+            result = Array[DestIndex] - Decoded->Operands[1].Immediate.Value;
+        }
+        else if (Decoded->Operands[1].Type == Operand_Register)
+        {
+            result = Array[DestIndex] - Array[Decoded->Operands[1].Register.Index - 1];
+        }
+        // cmp doesn't modify registers, only flags
+        UpdateFlags(flags, result);
     }
 }
 const char *RegisterTable[] = {
     "ax", "bx", "cx", "dx", "sp", "bp", "si", "di",
 };
 
-void PrintExecution(u16 *Array, instruction *Decoded)
+// Print flags
+void PrintFlags(processor_flags *oldFlags, processor_flags *newFlags)
 {
+    printf(" flags:");
+
+    // Print old flags
+    if (oldFlags->sign)
+        printf("S");
+    if (oldFlags->zero)
+        printf("Z");
+    if (oldFlags->parity)
+        printf("P");
+
+    printf("->");
+
+    // Print new flags
+    if (newFlags->sign)
+        printf("S");
+    if (newFlags->parity)
+        printf("P");
+    if (newFlags->zero)
+        printf("Z");
+}
+
+void PrintExecution(u16 *Array, instruction *Decoded, u16 oldValue, processor_flags *oldFlags, processor_flags *newFlags)
+{
+    if (Decoded->Op == Op_cmp)
+    {
+        PrintFlags(oldFlags, newFlags);
+        return;
+    }
+
     u16 RegisterIndex = Decoded->Operands[0].Register.Index - 1;
-    u16 OldValue = Array[RegisterIndex]; // Current value (before execution)
-    u16 NewValue;
-    // I dont know how to store the flags
+    u16 NewValue = Array[RegisterIndex]; // Value after execution
 
-    if (Decoded->Op == Op_mov)
-    {
-        if (Decoded->Operands[1].Type == Operand_Immediate)
-        {
-            NewValue = Decoded->Operands[1].Immediate.Value;
-        }
-        else if (Decoded->Operands[1].Type == Operand_Register)
-        {
-            NewValue = Array[Decoded->Operands[1].Register.Index - 1];
-        }
-    }
-    else if (Decoded->Op == Op_sub)
-    {
-        if (Decoded->Operands[1].Type == Operand_Immediate)
-        {
-            NewValue = Array[RegisterIndex] - Decoded->Operands[1].Immediate.Value;
-        }
-        else if (Decoded->Operands[1].Type == Operand_Register)
-        {
-            NewValue = Array[RegisterIndex] - Array[Decoded->Operands[1].Register.Index - 1];
-        }
-    }
-    else if (Decoded->Op == Op_add)
-    {
-        if (Decoded->Operands[1].Type == Operand_Immediate)
-        {
-            NewValue = Array[RegisterIndex] + Decoded->Operands[1].Immediate.Value;
-        }
-        else if (Decoded->Operands[1].Type == Operand_Register)
-        {
-            NewValue = Array[RegisterIndex] + Array[Decoded->Operands[1].Register.Index - 1];
-        }
-    }
+    printf(" ; %s:0x%x->0x%x", RegisterTable[RegisterIndex], oldValue, NewValue);
 
-    if (Decoded->Op != Op_cmp)
+    // Check if this operation affects flags and if flags changed
+    if (Decoded->Op == Op_sub || Decoded->Op == Op_add)
     {
-        printf(" ; %s:0x%x->0x%x", RegisterTable[RegisterIndex], OldValue, NewValue);
+        if (oldFlags->sign != newFlags->sign || oldFlags->zero != newFlags->zero || oldFlags->parity != newFlags->parity)
+        {
+            PrintFlags(oldFlags, newFlags);
+        }
     }
 }
 
-void PrintFinalRegisters(u16 *Array)
+void PrintFinalRegisters(u16 *Array, processor_flags *flags)
 {
     printf("\nFinal registers:\n");
     for (int RegisterIndex = 0; RegisterIndex < 8; RegisterIndex++)
     {
-        printf("      %s: 0x%04x (%d)\n", RegisterTable[RegisterIndex], Array[RegisterIndex], Array[RegisterIndex]);
+        if (Array[RegisterIndex] != 0)
+        {
+            printf("      %s: 0x%04x (%d)\n", RegisterTable[RegisterIndex], Array[RegisterIndex], Array[RegisterIndex]);
+        }
+    }
+
+    // Print flags if any are set
+    if (flags->sign || flags->zero || flags->parity)
+    {
+        printf("   flags: ");
+        if (flags->parity)
+            printf("P");
+        if (flags->zero)
+            printf("Z");
+        printf("\n");
     }
 }
 
@@ -231,6 +285,7 @@ int main(int ArgCount, char **Args)
     printf("bits 16\n\n");
 
     u16 Array[8] = {};
+    processor_flags flags = {};
 
     // Decode instructions using shared library
     u32 At = 0;
@@ -257,8 +312,14 @@ int main(int ArgCount, char **Args)
 
             if (Execute)
             {
-                PrintExecution(Array, &Decoded);         // Print BEFORE execution to capture old value
-                Execute8086Instruction(Array, &Decoded); // Then execute
+                processor_flags oldFlags = flags; // Save old flags
+                u16 oldValue = 0;
+                if (Decoded.Operands[0].Type == Operand_Register)
+                {
+                    oldValue = Array[Decoded.Operands[0].Register.Index - 1];
+                }
+                Execute8086Instruction(Array, &Decoded, &flags);              // Execute and update flags
+                PrintExecution(Array, &Decoded, oldValue, &oldFlags, &flags); // Print with old and new values/flags
             }
             printf("\n");
             At += Decoded.Size;
@@ -269,7 +330,7 @@ int main(int ArgCount, char **Args)
             break;
         }
     }
-    PrintFinalRegisters(Array);
+    PrintFinalRegisters(Array, &flags);
 
     return 0;
 }
