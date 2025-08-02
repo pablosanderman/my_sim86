@@ -365,7 +365,8 @@ int main(int ArgCount, char **Args)
     // char FileName[] = "listing_0046_add_sub_cmp";
     // char FileName[] = "listing_0048_ip_register";
     // char FileName[] = "listing_0049_conditional_jumps";
-    char FileName[] = "listing_0053_add_loop_challenge";
+    // char FileName[] = "listing_0053_add_loop_challenge";
+    char FileName[] = "listing_0054_draw_rectangle";
 
     u8 Bytes[1024];
     u32 BytesCount = LoadBytesFromFile(FileName, Bytes);
