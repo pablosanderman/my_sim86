@@ -11,6 +11,9 @@ struct processor_flags
     bool parity;
 };
 
+// Memory array for 8086 simulation (64KB address space)
+u8 Memory[1024 * 64] = {};
+
 // Keep the file loading function from your original code
 u32 LoadBytesFromFile(char *FileName, u8 Bytes[])
 {
@@ -47,6 +50,89 @@ void UpdateFlags(processor_flags *flags, u16 result)
     flags->zero = (result == 0);
     flags->sign = ((s16)result < 0);
     flags->parity = CalculateParity(result);
+}
+
+// Calculate effective address from memory operand
+u32 CalculateEffectiveAddress(instruction_operand *operand, u16 *registers)
+{
+    if (operand->Type != Operand_Memory)
+        return 0;
+
+    effective_address_expression *addr = &operand->Address;
+    u32 address = addr->Displacement;
+
+    // Add register terms
+    for (int i = 0; i < 2; i++)
+    {
+        effective_address_term *term = &addr->Terms[i];
+        if (term->Register.Index != 0)
+        {
+            u16 regValue = registers[term->Register.Index - 1];
+            address += regValue * term->Scale;
+        }
+    }
+
+    return address;
+}
+
+// Read 16-bit word from memory
+u16 ReadMemoryWord(u32 address)
+{
+    if (address >= sizeof(Memory) - 1)
+        return 0;
+    return (u16)Memory[address] | ((u16)Memory[address + 1] << 8);
+}
+
+// Write 16-bit word to memory
+void WriteMemoryWord(u32 address, u16 value)
+{
+    if (address >= sizeof(Memory) - 1)
+        return;
+    Memory[address] = (u8)(value & 0xFF);
+    Memory[address + 1] = (u8)((value >> 8) & 0xFF);
+}
+
+// Get operand value (register, immediate, or memory)
+u16 GetOperandValue(instruction_operand *operand, u16 *registers)
+{
+    switch (operand->Type)
+    {
+    case Operand_Register:
+        return registers[operand->Register.Index - 1];
+
+    case Operand_Immediate:
+        return operand->Immediate.Value;
+
+    case Operand_Memory:
+    {
+        u32 address = CalculateEffectiveAddress(operand, registers);
+        return ReadMemoryWord(address);
+    }
+
+    default:
+        return 0;
+    }
+}
+
+// Set operand value (register or memory)
+void SetOperandValue(instruction_operand *operand, u16 *registers, u16 value)
+{
+    switch (operand->Type)
+    {
+    case Operand_Register:
+        registers[operand->Register.Index - 1] = value;
+        break;
+
+    case Operand_Memory:
+    {
+        u32 address = CalculateEffectiveAddress(operand, registers);
+        WriteMemoryWord(address, value);
+        break;
+    }
+
+    default:
+        break;
+    }
 }
 
 // Helper function to print operand
@@ -124,67 +210,47 @@ void PrintOperand(instruction_operand *Operand)
 
 void Execute8086Instruction(u16 *Array, instruction *Decoded, processor_flags *flags)
 {
-    if (Decoded->Op == Op_mov)
+    switch (Decoded->Op)
     {
-        u16 DestIndex = Decoded->Operands[0].Register.Index - 1;
-        u16 SourceValue;
-        if (Decoded->Operands[1].Type == Operand_Immediate)
-        {
-            SourceValue = Decoded->Operands[1].Immediate.Value;
-        }
-        else if (Decoded->Operands[1].Type == Operand_Register)
-        {
-            SourceValue = Array[Decoded->Operands[1].Register.Index - 1];
-        }
-        Array[DestIndex] = SourceValue;
+    case Op_mov:
+    {
+        u16 sourceValue = GetOperandValue(&Decoded->Operands[1], Array);
+        SetOperandValue(&Decoded->Operands[0], Array, sourceValue);
         // mov doesn't affect flags
+        break;
     }
-    else if (Decoded->Op == Op_sub)
+
+    case Op_add:
     {
-        u16 DestIndex = Decoded->Operands[0].Register.Index - 1;
-        u16 SourceValue;
-        if (Decoded->Operands[1].Type == Operand_Immediate)
-        {
-            SourceValue = Array[DestIndex] - Decoded->Operands[1].Immediate.Value;
-        }
-        else if (Decoded->Operands[1].Type == Operand_Register)
-        {
-            SourceValue = Array[DestIndex] - Array[Decoded->Operands[1].Register.Index - 1];
-        }
-        Array[DestIndex] = SourceValue;
-        UpdateFlags(flags, SourceValue);
-    }
-    else if (Decoded->Op == Op_add)
-    {
-        u16 DestIndex = Decoded->Operands[0].Register.Index - 1;
-        u16 SourceValue;
-        if (Decoded->Operands[1].Type == Operand_Immediate)
-        {
-            SourceValue = Array[DestIndex] + Decoded->Operands[1].Immediate.Value;
-        }
-        else if (Decoded->Operands[1].Type == Operand_Register)
-        {
-            SourceValue = Array[DestIndex] + Array[Decoded->Operands[1].Register.Index - 1];
-        }
-        Array[DestIndex] = SourceValue;
-        UpdateFlags(flags, SourceValue);
-    }
-    else if (Decoded->Op == Op_cmp)
-    {
-        u16 DestIndex = Decoded->Operands[0].Register.Index - 1;
-        u16 result;
-        if (Decoded->Operands[1].Type == Operand_Immediate)
-        {
-            result = Array[DestIndex] - Decoded->Operands[1].Immediate.Value;
-        }
-        else if (Decoded->Operands[1].Type == Operand_Register)
-        {
-            result = Array[DestIndex] - Array[Decoded->Operands[1].Register.Index - 1];
-        }
-        // cmp doesn't modify registers, only flags
+        u16 destValue = GetOperandValue(&Decoded->Operands[0], Array);
+        u16 sourceValue = GetOperandValue(&Decoded->Operands[1], Array);
+        u16 result = destValue + sourceValue;
+        SetOperandValue(&Decoded->Operands[0], Array, result);
         UpdateFlags(flags, result);
+        break;
     }
-    else if (Decoded->Op == Op_jne)
+
+    case Op_sub:
+    {
+        u16 destValue = GetOperandValue(&Decoded->Operands[0], Array);
+        u16 sourceValue = GetOperandValue(&Decoded->Operands[1], Array);
+        u16 result = destValue - sourceValue;
+        SetOperandValue(&Decoded->Operands[0], Array, result);
+        UpdateFlags(flags, result);
+        break;
+    }
+
+    case Op_cmp:
+    {
+        u16 destValue = GetOperandValue(&Decoded->Operands[0], Array);
+        u16 sourceValue = GetOperandValue(&Decoded->Operands[1], Array);
+        u16 result = destValue - sourceValue;
+        // cmp doesn't modify operands, only flags
+        UpdateFlags(flags, result);
+        break;
+    }
+
+    case Op_jne:
     {
         // Jump if not equal (zero flag is false) - same as jnz
         if (!flags->zero)
@@ -192,6 +258,11 @@ void Execute8086Instruction(u16 *Array, instruction *Decoded, processor_flags *f
             // Relative jump - add the displacement to current IP
             Array[8] = Array[8] + Decoded->Operands[0].Immediate.Value;
         }
+        break;
+    }
+
+    default:
+        break;
     }
 }
 const char *RegisterTable[] = {"ax", "bx", "cx", "dx", "sp", "bp", "si", "di", "ip"};
@@ -224,7 +295,7 @@ void PrintExecution(u16 *Array, instruction *Decoded, u16 oldValue, u16 oldIP, p
 {
     if (Decoded->Op == Op_cmp)
     {
-        printf(" ip:0x%x->0x%x", oldIP, Array[8]);
+        printf(" ; ip:0x%x->0x%x", oldIP, Array[8]);
         PrintFlags(oldFlags, newFlags);
         return;
     }
@@ -235,10 +306,18 @@ void PrintExecution(u16 *Array, instruction *Decoded, u16 oldValue, u16 oldIP, p
         return;
     }
 
-    u16 RegisterIndex = Decoded->Operands[0].Register.Index - 1;
-    u16 NewValue = Array[RegisterIndex]; // Value after execution
-
-    printf(" ; %s:0x%x->0x%x ip:0x%x->0x%x", RegisterTable[RegisterIndex], oldValue, NewValue, oldIP, Array[8]);
+    // For mov, add, sub operations, show what changed
+    if (Decoded->Operands[0].Type == Operand_Register)
+    {
+        u16 RegisterIndex = Decoded->Operands[0].Register.Index - 1;
+        u16 NewValue = Array[RegisterIndex]; // Value after execution
+        printf(" ; %s:0x%x->0x%x ip:0x%x->0x%x", RegisterTable[RegisterIndex], oldValue, NewValue, oldIP, Array[8]);
+    }
+    else
+    {
+        // Memory destination - just show IP change
+        printf(" ; ip:0x%x->0x%x", oldIP, Array[8]);
+    }
 
     // Check if this operation affects flags and if flags changed
     if (Decoded->Op == Op_sub || Decoded->Op == Op_add)
@@ -285,7 +364,8 @@ int main(int ArgCount, char **Args)
     // char FileName[] = "listing_0044_register_movs";
     // char FileName[] = "listing_0046_add_sub_cmp";
     // char FileName[] = "listing_0048_ip_register";
-    char FileName[] = "listing_0049_conditional_jumps";
+    // char FileName[] = "listing_0049_conditional_jumps";
+    char FileName[] = "listing_0053_add_loop_challenge";
 
     u8 Bytes[1024];
     u32 BytesCount = LoadBytesFromFile(FileName, Bytes);
@@ -340,10 +420,17 @@ int main(int ArgCount, char **Args)
                 processor_flags oldFlags = flags; // Save old flags
                 u16 oldValue = 0;
                 u16 oldIP = At; // Save the IP before execution
+
+                // Get old value of destination operand for printing
                 if (Decoded.Operands[0].Type == Operand_Register)
                 {
                     oldValue = Array[Decoded.Operands[0].Register.Index - 1];
                 }
+                else if (Decoded.Operands[0].Type == Operand_Memory)
+                {
+                    oldValue = GetOperandValue(&Decoded.Operands[0], Array);
+                }
+
                 u16 expectedNextIP = At + Decoded.Size;
                 Array[8] = expectedNextIP;                                           // Update IP to point to next instruction
                 Execute8086Instruction(Array, &Decoded, &flags);                     // Execute and update flags (may modify IP for jumps)
